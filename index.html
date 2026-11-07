@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculator</title>
+<style>
+  * { box-sizing: border-box; }
+  :root { color-scheme: dark; }
+  html, body { margin: 0; min-height: 100%; background: #171719; color: #f8f8fa; font-family: Arial, Helvetica, sans-serif; }
+  body { min-height: 100dvh; display: flex; justify-content: center; }
+  .calculator { width: min(100%, 520px); min-height: 100dvh; display: flex; flex-direction: column; padding: 18px 18px max(24px, env(safe-area-inset-bottom)); }
+  .topbar { height: 48px; display: flex; align-items: center; justify-content: flex-end; gap: 24px; color: #f4f4f5; }
+  .topbar button { background: transparent; border: 0; color: inherit; font-size: 27px; cursor: pointer; padding: 5px; }
+  .display { flex: 1; min-height: 210px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; padding: 22px 10px 34px; overflow: hidden; }
+  .history { min-height: 30px; color: #9b9ba0; font-size: clamp(18px, 5vw, 26px); overflow-wrap: anywhere; text-align: right; }
+  .result { font-size: clamp(64px, 22vw, 112px); font-weight: 300; line-height: 1.1; letter-spacing: -3px; overflow-wrap: anywhere; text-align: right; }
+  .keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(12px, 3.4vw, 18px); }
+  .key { aspect-ratio: 1; border: 0; border-radius: 50%; background: linear-gradient(145deg, #414144, #29292b); color: #fafafa; font-size: clamp(25px, 7vw, 40px); font-weight: 500; cursor: pointer; display: grid; place-items: center; box-shadow: inset 0 1px 1px #ffffff12; -webkit-tap-highlight-color: transparent; transition: filter .08s, transform .08s; }
+  .key:active { filter: brightness(1.35); transform: scale(.96); }
+  .key.utility, .key.operator { background: linear-gradient(145deg, #303033, #1c1c1e); border: 1px solid #4b4b4f; box-shadow: inset 0 2px 3px #ffffff14, 0 1px 2px #000; }
+  .key.equals { background: linear-gradient(145deg, #d6c6df, #ad9bb9); color: white; }
+  .key svg { width: 34%; height: 34%; stroke: currentColor; fill: none; stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; }
+  .bottom { display: flex; justify-content: center; padding-top: 22px; }
+  .gesture { width: 108px; height: 5px; border-radius: 99px; background: #88888c; }
+  @media (min-width: 600px) { .calculator { min-height: 780px; } .display { min-height: 400px; } }
+</style>
+</head>
+<body>
+<main class="calculator" aria-label="Calculator">
+  <header class="topbar">
+    <button aria-label="Toggle compact display" id="compact" title="Compact display">↙↗</button>
+    <span style="flex:1"></span>
+    <button aria-label="Scientific functions" id="scientific" title="Scientific functions">√π<br><span style="font-size:19px">e⁼</span></button>
+    <button aria-label="Show keypad" id="keypad" title="Keypad">▦</button>
+    <button aria-label="More options" id="more" title="More options">⋮</button>
+  </header>
+  <section class="display" aria-live="polite">
+    <div class="history" id="history"></div>
+    <div class="result" id="display">0</div>
+  </section>
+  <section class="keys" id="keys">
+    <button class="key utility" data-action="clear">AC</button>
+    <button class="key utility" data-action="percent">%</button>
+    <button class="key utility" data-action="backspace" aria-label="Backspace">
+      <svg viewBox="0 0 24 24"><path d="M9 4H21V20H9L2 12Z"/><path d="m13 9 4 6m0-6-4 6"/></svg>
+    </button>
+    <button class="key operator" data-value="÷">÷</button>
+    <button class="key" data-value="7">7</button><button class="key" data-value="8">8</button><button class="key" data-value="9">9</button><button class="key operator" data-value="×">×</button>
+    <button class="key" data-value="4">4</button><button class="key" data-value="5">5</button><button class="key" data-value="6">6</button><button class="key operator" data-value="−">−</button>
+    <button class="key" data-value="1">1</button><button class="key" data-value="2">2</button><button class="key" data-value="3">3</button><button class="key operator" data-value="+">+</button>
+    <button class="key" data-action="doublezero">00</button><button class="key" data-value="0">0</button><button class="key" data-value=".">.</button><button class="key equals" data-action="equals">=</button>
+  </section>
+  <div class="bottom"><div class="gesture"></div></div>
+</main>
+<script>
+(() => {
+  const display = document.getElementById('display');
+  const history = document.getElementById('history');
+  const keys = document.getElementById('keys');
+  let current = '0', stored = null, operator = null, fresh = false;
+  const show = () => { display.textContent = current; };
+  const fmt = n => Number.isFinite(n) ? String(Number.parseFloat(n.toPrecision(12))) : 'Error';
+  const calculate = (a, op, b) => {
+    switch (op) {
+      case '+': return a + b;
+      case '−': return a - b;
+      case '×': return a * b;
+      case '÷': return b === 0 ? NaN : a / b;
+      default: return b;
+    }
+  };
+  function input(v) {
+    if (fresh) { current = v === '.' ? '0.' : v; fresh = false; }
+    else if (v === '.') { if (!current.includes('.')) current += '.'; }
+    else current = current === '0' ? v : current + v;
+    show();
+  }
+  function choose(op) {
+    const n = Number(current);
+    if (operator && !fresh) { current = fmt(calculate(stored, operator, n)); show(); }
+    stored = Number(current); operator = op; fresh = true;
+    history.textContent = `${current} ${op}`;
+  }
+  function equals() {
+    if (!operator || stored === null) return;
+    const before = `${fmt(stored)} ${operator} ${current}`;
+    current = fmt(calculate(stored, operator, Number(current)));
+    history.textContent = before + ' =';
+    stored = null; operator = null; fresh = true; show();
+  }
+  keys.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const v = b.dataset.value, action = b.dataset.action;
+    if (v !== undefined) {
+      if ('0123456789.'.includes(v)) input(v);
+      else choose(v);
+      return;
+    }
+    if (action === 'clear') { current = '0'; stored = null; operator = null; fresh = false; history.textContent = ''; show(); }
+    if (action === 'backspace') { if (!fresh) current = current.length > 1 ? current.slice(0,-1) : '0'; show(); }
+    if (action === 'doublezero') input('00');
+    if (action === 'percent') { current = fmt(Number(current) / 100); show(); }
+    if (action === 'equals') equals();
+  });
+  document.addEventListener('keydown', e => {
+    if (/^[0-9.]$/.test(e.key)) input(e.key);
+    else if (e.key === '+') choose('+');
+    else if (e.key === '-') choose('−');
+    else if (e.key === '*') choose('×');
+    else if (e.key === '/') choose('÷');
+    else if (e.key === 'Enter' || e.key === '=') equals();
+    else if (e.key === 'Backspace') { current = current.length > 1 ? current.slice(0,-1) : '0'; show(); }
+    else if (e.key === 'Escape') { current='0'; stored=null; operator=null; history.textContent=''; show(); }
+  });
+  document.getElementById('compact').addEventListener('click', () => document.querySelector('.display').classList.toggle('compact'));
+  document.getElementById('scientific').addEventListener('click', () => {
+    const choice = prompt('Scientific operation: sqrt, square, pi, or reciprocal');
+    if (choice === 'sqrt') current = fmt(Math.sqrt(Number(current)));
+    else if (choice === 'square') current = fmt(Number(current) ** 2);
+    else if (choice === 'pi') current = fmt(Math.PI);
+    else if (choice === 'reciprocal') current = fmt(1 / Number(current));
+    show();
+  });
+  document.getElementById('keypad').addEventListener('click', () => keys.classList.toggle('hidden'));
+  document.getElementById('more').addEventListener('click', () => alert('Calculator • Single-file HTML'));
+  show();
+})();
+</script>
+</body>
+</html>
